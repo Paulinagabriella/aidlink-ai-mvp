@@ -1,0 +1,11 @@
+text,category,severity
+"We have no drinking water and the stores are closed",water,high
+"My child has a fever and we need medicine",medical,high
+"We need a place to sleep tonight",shelter,high
+"I need food for my family",food,medium
+"We lost power but we are okay",other,low
+"We need bottled water and baby formula",water,high
+"My dad needs insulin and we have no transportation",medical,high
+"Our home is damaged and it’s freezing",shelter,high
+"I have some clothes to donate",other,low
+"We have food but no clean water",water,high

@@ -1,0 +1,17 @@
+[
+  {
+    "id": "076d42ec-457d-4de9-8732-c000303dca2c",
+    "title": "Water bottles",
+    "categories": [
+      "water"
+    ],
+    "location": {
+      "lat": 40.79462131260398,
+      "lng": -77.8693268190599
+    },
+    "severity": 3,
+    "population_density": 270.56,
+    "available_aid": 128.0,
+    "notes": ""
+  }
+]

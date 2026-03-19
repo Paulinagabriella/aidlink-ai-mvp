@@ -1,98 +1,174 @@
-import { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
-  Box, Button, Input, Select, NumberInput, NumberInputField, Textarea, VStack, Checkbox,
+  Box,
+  Input,
+  Button,
+  VStack,
+  Text,
+  Checkbox,
+  CheckboxGroup,
+  Stack,
+  Select,
 } from "@chakra-ui/react";
 
-export default function NeedForm({ onCreated, userLoc = null }) {
-  const [useMyLoc, setUseMyLoc] = useState(!!userLoc);
+const API = "/api"; // use Vite proxy; switch to http://127.0.0.1:8000 if not using proxy
+
+export default function NeedForm({ onCreated, userLoc }) {
   const [form, setForm] = useState({
     title: "",
-    category: "water",
-    lat: userLoc ? String(userLoc.lat) : "31.15",
-    lng: userLoc ? String(userLoc.lng) : "74.20",
-    severity: "3",
+    lat: "",
+    lng: "",
+    severity: "3", // backend expects 1..5
     notes: "",
   });
 
-  useEffect(() => {
-    if (useMyLoc && userLoc) {
-      setForm((s) => ({ ...s, lat: String(userLoc.lat), lng: String(userLoc.lng) }));
+  const [useMyLoc, setUseMyLoc] = useState(false);
+  const [categories, setCategories] = useState([]); // multi-select; first is posted
+
+  const handleChange = (e) =>
+    setForm((s) => ({ ...s, [e.target.name]: e.target.value }));
+
+  const toggleUseMyLoc = (checked) => {
+    setUseMyLoc(checked);
+    if (checked && userLoc) {
+      setForm((s) => ({
+        ...s,
+        lat: String(userLoc.lat),
+        lng: String(userLoc.lng),
+      }));
     }
-  }, [useMyLoc, userLoc]);
+  };
 
-  const upd = (k, v) => setForm((s) => ({ ...s, [k]: v }));
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  async function submit() {
-    if (!form.lat || !form.lng) {
-      alert("Please provide latitude and longitude");
+    if (!form.title || !form.lat || !form.lng || categories.length === 0) {
+      alert("Please fill title/coords and select at least one need.");
       return;
     }
+
     let lat = parseFloat(form.lat);
     let lng = parseFloat(form.lng);
 
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      alert("Latitude/Longitude must be numbers");
+      return;
+    }
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       alert("Lat must be -90..90 and Lng -180..180");
       return;
     }
-    // common US fix: positive longitude → ask to flip negative
+
+    // Helpful US fix: if lat is US range and lng positive, offer to flip to negative
     if (lat >= 24 && lat <= 49 && lng > 0) {
       if (confirm("Longitude for U.S. locations is usually negative. Flip it?")) {
         lng = -lng;
       }
     }
 
+    const categoryForPost = categories[0]; // backend expects a single category for the created Need
+
     const payload = {
-      title: form.title || "Untitled",
-      category: form.category,
-      location: { lat, lng },
-      severity: parseInt(form.severity || "3"),
-      // population_density & available_aid are enriched on the server
+      title: form.title,
+      category: categoryForPost,               // "food" | "water" | "shelter" | "medical"
+      location: { lat, lng },                  // nested object for backend
+      severity: parseInt(form.severity, 10),   // 1..5
       notes: form.notes || "",
     };
 
     try {
-      const r = await fetch("http://127.0.0.1:8000/needs", {
+      const res = await fetch(`${API}/needs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await r.json();
-      if (!r.ok) {
-        console.error("POST /needs failed", data);
-        alert("Failed to post need. Check backend console.");
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error("POST /needs failed:", errText);
+        alert("Error submitting form");
+        return;
       }
-      onCreated(data, form.category); // pass category so parent can compute nearest
-      setForm((s) => ({ ...s, title: "", notes: "" }));
-    } catch (e) {
-      console.error(e);
-      alert("Network error posting need");
+
+      const data = await res.json();
+
+      // Notify parent (it will reload needs & priorities and can run nearest searches)
+      onCreated?.(data, categories, { lat, lng });
+
+      // reset form
+      setForm({ title: "", lat: "", lng: "", severity: "3", notes: "" });
+      setCategories([]);
+      setUseMyLoc(false);
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting form");
     }
-  }
+  };
 
   return (
-    <Box>
-      <VStack align="stretch" gap={2}>
-        <Input placeholder="Title" value={form.title} onChange={(e)=>upd("title", e.target.value)} />
-        <Select value={form.category} onChange={(e)=>upd("category", e.target.value)}>
-          <option value="food">Food</option>
-          <option value="water">Water</option>
-          <option value="shelter">Shelter</option>
-          <option value="medical">Medical</option>
-        </Select>
+    <Box as="form" onSubmit={handleSubmit}>
+      <VStack align="stretch" spacing={3}>
+        <Input
+          placeholder="Need title (e.g. Water bottles)"
+          name="title"
+          value={form.title}
+          onChange={handleChange}
+        />
 
-        <Checkbox isChecked={useMyLoc} onChange={(e)=>setUseMyLoc(e.target.checked)}>
-          Use my location
+        <Checkbox isChecked={useMyLoc} onChange={(e) => toggleUseMyLoc(e.target.checked)}>
+          Use my device location
         </Checkbox>
 
-        <Input type="number" step="any" placeholder="Latitude"  value={form.lat} onChange={(e)=>upd("lat", e.target.value)}  isDisabled={useMyLoc}/>
-        <Input type="number" step="any" placeholder="Longitude" value={form.lng} onChange={(e)=>upd("lng", e.target.value)} isDisabled={useMyLoc}/>
+        <Stack direction="row" spacing={2}>
+          <Input
+            placeholder="Latitude"
+            name="lat"
+            value={form.lat}
+            onChange={handleChange}
+            isDisabled={useMyLoc}
+          />
+          <Input
+            placeholder="Longitude"
+            name="lng"
+            value={form.lng}
+            onChange={handleChange}
+            isDisabled={useMyLoc}
+          />
+        </Stack>
 
-        <NumberInput value={form.severity} min={1} max={5}>
-          <NumberInputField placeholder="Severity (1-5)" onChange={(e)=>upd("severity", e.target.value)} />
-        </NumberInput>
+        <Select name="severity" value={form.severity} onChange={handleChange}>
+          <option value="1">Severity 1 (lowest)</option>
+          <option value="2">Severity 2</option>
+          <option value="3">Severity 3</option>
+          <option value="4">Severity 4</option>
+          <option value="5">Severity 5 (highest)</option>
+        </Select>
 
-        <Textarea placeholder="Notes" value={form.notes} onChange={(e)=>upd("notes", e.target.value)} />
-        <Button onClick={submit} colorScheme="blue">Submit & Find Nearest</Button>
+        <Input
+          placeholder="Notes (optional)"
+          name="notes"
+          value={form.notes}
+          onChange={handleChange}
+        />
+
+        <Box>
+          <Text fontWeight="semibold" mb={1}>Select needs (first is posted):</Text>
+          <CheckboxGroup value={categories} onChange={setCategories}>
+            <Stack spacing={1}>
+              <Checkbox value="water">Water</Checkbox>
+              <Checkbox value="food">Food</Checkbox>
+              <Checkbox value="shelter">Shelter</Checkbox>
+              <Checkbox value="medical">Medical</Checkbox>
+            </Stack>
+          </CheckboxGroup>
+          <Text fontSize="sm" color="gray.600" mt={1}>
+            The first checked item is used for the posted need; all selected are used to find nearby places in the UI.
+          </Text>
+        </Box>
+
+        <Button colorScheme="blue" type="submit">
+          Submit Need
+        </Button>
       </VStack>
     </Box>
   );

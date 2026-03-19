@@ -1,22 +1,36 @@
+import os
+import uuid
+import asyncio
+from math import radians, sin, cos, asin, sqrt
+from typing import Optional, List
+
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
-import uuid
-from math import radians, sin, cos, asin, sqrt
-import httpx
-import asyncio
 
-# Option A: keep __init__.py in backend/ and run from project root
 from backend.models import Need, GeoPoint
 from backend.scoring import cluster_needs
 
 app = FastAPI(title="AidLink AI API", version="1.2")
 
-# Allow your Vite dev server
+
+def get_allowed_origins() -> List[str]:
+    raw = os.getenv("ALLOWED_ORIGINS", "")
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+
+    # keep local dev working too
+    local_defaults = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+
+    return list(dict.fromkeys(local_defaults + origins))
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=get_allowed_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -46,38 +60,72 @@ class Org(BaseModel):
     accepts_donations: bool = True
     methods: List[str] = []
 
-# Demo orgs around Lahore and Penn State
+
 orgs: List[Org] = [
-    Org(id="o-lhr-water-1", name="Lahore Clean Water Point", categories=["water"], location=GeoPoint(lat=31.170, lng=74.250), methods=["Stripe", "PayPal"]),
-    Org(id="o-lhr-shelter-1", name="ShelterNow Lahore", categories=["shelter"], location=GeoPoint(lat=31.120, lng=74.180), methods=["Bank"]),
-    Org(id="o-psu-water-1", name="PSU Community Water Station", categories=["water"], location=GeoPoint(lat=40.806, lng=-77.862), methods=["PayPal"]),
-    Org(id="o-psu-food-1", name="State College Food Bank", categories=["food"], location=GeoPoint(lat=40.800, lng=-77.870), methods=["Stripe"]),
-    Org(id="o-psu-shelter-1", name="Centre County Shelter Services", categories=["shelter"], location=GeoPoint(lat=40.792, lng=-77.860), methods=["Stripe", "PayPal"]),
-    Org(id="o-psu-med-1", name="Mount Nittany First Aid", categories=["medical"], location=GeoPoint(lat=40.805, lng=-77.848), methods=["Bank"]),
+    Org(
+        id="o-lhr-water-1",
+        name="Lahore Clean Water Point",
+        categories=["water"],
+        location=GeoPoint(lat=31.170, lng=74.250),
+        methods=["Stripe", "PayPal"],
+    ),
+    Org(
+        id="o-lhr-shelter-1",
+        name="ShelterNow Lahore",
+        categories=["shelter"],
+        location=GeoPoint(lat=31.120, lng=74.180),
+        methods=["Bank"],
+    ),
+    Org(
+        id="o-psu-water-1",
+        name="PSU Community Water Station",
+        categories=["water"],
+        location=GeoPoint(lat=40.806, lng=-77.862),
+        methods=["PayPal"],
+    ),
+    Org(
+        id="o-psu-food-1",
+        name="State College Food Bank",
+        categories=["food"],
+        location=GeoPoint(lat=40.800, lng=-77.870),
+        methods=["Stripe"],
+    ),
+    Org(
+        id="o-psu-shelter-1",
+        name="Centre County Shelter Services",
+        categories=["shelter"],
+        location=GeoPoint(lat=40.792, lng=-77.860),
+        methods=["Stripe", "PayPal"],
+    ),
+    Org(
+        id="o-psu-med-1",
+        name="Mount Nittany First Aid",
+        categories=["medical"],
+        location=GeoPoint(lat=40.805, lng=-77.848),
+        methods=["Bank"],
+    ),
 ]
 
-# Friendlier POST model (id optional; density/aid optional now)
+
 class NeedCreate(BaseModel):
     id: Optional[str] = None
     title: str
-    category: str                 # food | water | shelter | medical
+    category: str
     location: GeoPoint
     severity: int
     population_density: Optional[int] = None
     available_aid: Optional[int] = None
     notes: Optional[str] = None
 
-# ----------------------------
-# Helpers
-# ----------------------------
+
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
     R = 6371.0
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
-    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
     return 2 * R * asin(sqrt(a))
 
-# WorldPop sample/stats (fallback to 0 on failure)
+
 async def fetch_population_density(lat: float, lng: float) -> int:
     stats_url = (
         "https://www.worldpop.org/sdi/advancedapi?dataset=wpgppop"
@@ -96,7 +144,7 @@ async def fetch_population_density(lat: float, lng: float) -> int:
         pass
     return 0
 
-# Overpass/OSM: count nearby facilities as "available aid"
+
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 TAG_MAP = {
     "water": ['amenity="drinking_water"', 'amenity="water_point"', 'man_made="water_tap"'],
@@ -105,10 +153,11 @@ TAG_MAP = {
     "medical": ['amenity="clinic"', 'amenity="hospital"', 'amenity="pharmacy"'],
 }
 
+
 def build_overpass_query(lat: float, lng: float, category: str, radius_m: int = 10000) -> str:
     tags = TAG_MAP.get(category.lower().strip(), [])
     if not tags:
-        tags = ['amenity']
+        tags = ["amenity"]
     ors = "|".join([t.replace('"', '\\"') for t in tags])
     return f"""
     [out:json][timeout:10];
@@ -119,6 +168,7 @@ def build_overpass_query(lat: float, lng: float, category: str, radius_m: int = 
     );
     out center;
     """
+
 
 async def fetch_available_aid(lat: float, lng: float, category: str) -> int:
     try:
@@ -132,28 +182,29 @@ async def fetch_available_aid(lat: float, lng: float, category: str) -> int:
         pass
     return 0
 
+
 async def enrich(lat: float, lng: float, category: str) -> dict:
     pd_task = fetch_population_density(lat, lng)
     aid_task = fetch_available_aid(lat, lng, category)
     pd, aid = await asyncio.gather(pd_task, aid_task)
     return {"population_density": pd, "available_aid": aid}
 
-# ----------------------------
-# Routes
-# ----------------------------
+
 @app.get("/health")
 def health():
     return {"ok": True}
+
 
 @app.get("/needs", response_model=List[Need])
 def list_needs():
     return needs
 
+
 @app.post("/needs", response_model=Need)
 async def create_need(n: NeedCreate):
-    # auto-enrich if missing/zero
     pd = n.population_density if (n.population_density not in (None, 0)) else None
     aid = n.available_aid if (n.available_aid not in (None, 0)) else None
+
     if pd is None or aid is None:
         e = await enrich(n.location.lat, n.location.lng, n.category)
         pd = e["population_density"] if pd is None else pd
@@ -174,21 +225,22 @@ async def create_need(n: NeedCreate):
         notes=n.notes,
     )
     needs.append(item)
-    print(f"[POST] added need {item.id} - {item.title} (pd={item.population_density}, aid={item.available_aid})")
     return item
+
 
 @app.delete("/needs/{need_id}")
 def delete_need(need_id: str):
     for i, n in enumerate(needs):
         if n.id == need_id:
-            deleted = needs.pop(i)
-            print(f"[DELETE] removed need {need_id} - {deleted.title}")
+            needs.pop(i)
             return {"message": f"Deleted {need_id}"}
     raise HTTPException(status_code=404, detail="Need not found")
+
 
 @app.get("/priorities")
 def get_priorities(k: int = 3):
     return {"top_regions": cluster_needs(needs, k)}
+
 
 @app.get("/nearest-orgs")
 def nearest_orgs(lat: float, lng: float, category: str, limit: int = 5):
@@ -201,7 +253,7 @@ def nearest_orgs(lat: float, lng: float, category: str, limit: int = 5):
     scored.sort(key=lambda x: x["km"])
     return scored[: max(1, min(limit, 10))]
 
-# Optional preview
+
 @app.get("/enrich")
 async def enrich_preview(lat: float, lng: float, category: str):
     return await enrich(lat, lng, category)
