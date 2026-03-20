@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-const API = "/api";
+const API =
+  import.meta.env.VITE_API_URL || "https://aidlink-ai-mvp-backend.onrender.com";
 
 // ---------- helpers ----------
 async function getJsonWithFallback(pathWithApiPrefix, pathNoPrefix) {

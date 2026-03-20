@@ -22,7 +22,8 @@ import SearchForm from "./components/SearchForm.jsx";
 import ResultsList from "./components/ResultsList.jsx";
 import UiControls from "./components/UiControls.jsx";
 
-const API = "/api";
+const API =
+  import.meta.env.VITE_API_URL || "https://aidlink-ai-mvp-backend.onrender.com";
 
 // ----- Error Boundary so a crash doesn't leave a blank page -----
 class ErrorBoundary extends React.Component {

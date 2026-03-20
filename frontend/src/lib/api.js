@@ -1,7 +1,8 @@
 // frontend/src/lib/api.js
-export const API = "/api";
+export const API =
+  import.meta.env.VITE_API_URL || "https://aidlink-ai-mvp-backend.onrender.com";
 
-// Safe JSON fetch (clear errors instead of the "<!doctype" surprise)
+// Safe JSON fetch
 export async function getJson(url, opts) {
   const res = await fetch(url, opts);
   const ct = res.headers.get("content-type") || "";

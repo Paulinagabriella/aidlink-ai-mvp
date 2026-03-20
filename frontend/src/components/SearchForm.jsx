@@ -1,7 +1,8 @@
+import { API } from "../lib/api";
 import React, { useMemo, useState } from "react";
 import { Box, Button, FormControl, FormLabel, HStack, Input, Text, VStack } from "@chakra-ui/react";
 
-const API = "/api";
+
 
 // small helper
 async function getJson(url) {

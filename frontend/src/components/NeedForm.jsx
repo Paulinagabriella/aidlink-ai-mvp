@@ -1,3 +1,4 @@
+import { API } from "../lib/api";
 import React, { useState } from "react";
 import {
   Box,
@@ -11,7 +12,6 @@ import {
   Select,
 } from "@chakra-ui/react";
 
-const API = "/api"; // use Vite proxy; switch to http://127.0.0.1:8000 if not using proxy
 
 export default function NeedForm({ onCreated, userLoc }) {
   const [form, setForm] = useState({
