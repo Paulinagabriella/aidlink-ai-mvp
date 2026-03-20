@@ -246,13 +246,16 @@ def get_priorities(k: int = 3):
 def nearest_orgs(lat: float, lng: float, category: str, limit: int = 5):
     c = category.lower().strip()
     candidates = [o for o in orgs if c in o.categories]
+
+    if not candidates:
+        candidates = orgs
+
     scored = [
         {"km": round(haversine_km(lat, lng, o.location.lat, o.location.lng), 2), "org": o}
         for o in candidates
     ]
     scored.sort(key=lambda x: x["km"])
     return scored[: max(1, min(limit, 10))]
-
 
 @app.get("/enrich")
 async def enrich_preview(lat: float, lng: float, category: str):
