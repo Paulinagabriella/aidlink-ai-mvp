@@ -3,7 +3,7 @@ import {
   Box, Button, Select, Text, VStack, HStack, Badge, Spinner
 } from "@chakra-ui/react";
 
-const API = "http://127.0.0.1:8000";
+import { API } from "../lib/api";
 
 export default function FindHelp() {
   const [loc, setLoc] = useState(null);
